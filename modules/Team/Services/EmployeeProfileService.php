@@ -5,12 +5,15 @@ namespace App\Modules\Team\Services;
 use App\Modules\Team\Models\EmployeeProfile;
 use App\Modules\Team\Models\User;
 use Illuminate\Support\Arr;
+use Tessera\Core\Contracts\Tenancy;
 
 class EmployeeProfileService
 {
+    public function __construct(private readonly Tenancy $tenancy) {}
+
     /**
      * Create or update the profile of an employee. A blank employee number keeps the current one,
-     * or generates the next free number for the company when there is none yet.
+     * or generates the next free number for the tenant when there is none yet.
      *
      * @param  array<string, mixed>  $data
      */
@@ -19,14 +22,14 @@ class EmployeeProfileService
         $fields = Arr::only($data, EmployeeProfile::EDITABLE);
         $profile = $user->employeeProfile ?? new EmployeeProfile([
             'user_id' => $user->id,
-            'company_id' => $user->company_id,
+            ...$this->tenancy->attributes($user->tenant_id),
         ]);
 
         if (blank($fields['employee_number'] ?? null)) {
             unset($fields['employee_number']);
 
             if (! $profile->exists) {
-                $fields['employee_number'] = $this->nextNumber($user->company_id);
+                $fields['employee_number'] = $this->nextNumber($user->tenant_id);
             }
         }
 
@@ -36,10 +39,9 @@ class EmployeeProfileService
         return $profile;
     }
 
-    public function nextNumber(?int $companyId): string
+    public function nextNumber(?int $tenantId): string
     {
-        $last = EmployeeProfile::query()
-            ->where('company_id', $companyId)
+        $last = $this->tenancy->scope(EmployeeProfile::query(), $tenantId)
             ->where('employee_number', 'like', 'EMP-%')
             ->orderByDesc('employee_number')
             ->value('employee_number');

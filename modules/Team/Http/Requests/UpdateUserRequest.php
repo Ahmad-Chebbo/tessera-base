@@ -10,6 +10,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Tessera\Core\Contracts\BranchScope;
+use Tessera\Core\Contracts\Tenancy;
 
 class UpdateUserRequest extends FormRequest
 {
@@ -23,7 +24,7 @@ class UpdateUserRequest extends FormRequest
 
         return $actor !== null
             && $actor->can('edit users')
-            && $target->company_id === $actor->company_id
+            && app(Tenancy::class)->sameTenant($target, $actor)
             && ! ($target->isSuperAdmin() && ! $actor->isSuperAdmin());
     }
 
@@ -41,8 +42,8 @@ class UpdateUserRequest extends FormRequest
             'password' => ['nullable', Password::defaults()],
             'role' => ['required', Rule::in(app(AssignableRoles::class)->for($actor))],
             'is_active' => ['boolean'],
-            ...(app(BranchScope::class)->available() ? ['branch_id' => ['required', 'integer', Rule::exists('branches', 'id')->where('company_id', $actor->company_id)]] : []),
-            ...(app(TeamFeatures::class)->employeeProfiles() ? $this->profileRules($actor->company_id, $target->id) : []),
+            ...(app(BranchScope::class)->available() ? ['branch_id' => ['required', 'integer', Rule::exists('branches', 'id')->where('tenant_id', $actor->tenant_id)]] : []),
+            ...(app(TeamFeatures::class)->employeeProfiles() ? $this->profileRules($actor->tenant_id, $target->id) : []),
         ];
     }
 }

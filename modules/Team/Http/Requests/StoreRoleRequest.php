@@ -6,6 +6,7 @@ use App\Modules\Team\Models\Role;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
+use Tessera\Core\Contracts\Tenancy;
 
 class StoreRoleRequest extends FormRequest
 {
@@ -20,11 +21,12 @@ class StoreRoleRequest extends FormRequest
     public function rules(): array
     {
         $role = $this->route('role');
+        $tenancy = app(Tenancy::class);
 
         return [
             'name' => [
                 'required', 'string', 'max:100', Rule::notIn(['Admin']),
-                Rule::unique('roles', 'name')->where('company_id', $this->user()->company_id)->ignore($role?->id),
+                $tenancy->scopeRule(Rule::unique('roles', 'name'), $tenancy->roleOwner($this->user()))->ignore($role?->id),
             ],
             'permissions' => ['present', 'array'],
             'permissions.*' => ['string', Rule::in($this->grantablePermissions())],
@@ -51,7 +53,7 @@ class StoreRoleRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.unique' => 'Your company already has a role with this name.',
+            'name.unique' => 'Your tenant already has a role with this name.',
             'name.not_in' => 'This name is reserved.',
             'permissions.*.in' => 'You can only grant permissions you hold yourself.',
         ];
@@ -64,6 +66,6 @@ class StoreRoleRequest extends FormRequest
      */
     public function grantablePermissions(): array
     {
-        return $this->user()->getAllPermissions()->pluck('name')->reject(fn (string $name): bool => $name === 'manage companies')->values()->all();
+        return $this->user()->getAllPermissions()->pluck('name')->reject(fn (string $name): bool => $name === 'manage tenants')->values()->all();
     }
 }
